@@ -1,306 +1,856 @@
-﻿# AdvancedAIDemo
+﻿# Stealth Variant AI System
 
-A modular Unreal Engine 5 C++ gameplay sandbox that demonstrates multiple playable variants (combat, platforming, side-scrolling) plus AI behaviors built with StateTree.
+A comprehensive stealth gameplay AI system for Unreal Engine 5, featuring intelligent guard behavior with dynamic suspicion mechanics, state-driven AI control, and inter-agent communication. This system provides a complete foundation for stealth-action games with realistic guard patrol, investigation, and pursuit mechanics.
 
-This project appears to have started from the Third Person template and evolved into a larger teaching/prototyping environment focused on movement systems, combat interactions, and AI-driven enemies/NPCs.
+---
 
 ## Table of Contents
 
-- [Project Goals](#project-goals)
-- [Current Gameplay Variants](#current-gameplay-variants)
-- [Tech Stack](#tech-stack)
-- [Project Layout](#project-layout)
-- [Requirements](#requirements)
-- [Getting Started](#getting-started)
-- [Build and Run (Optional CLI)](#build-and-run-optional-cli)
-- [Input System](#input-system)
-- [AI Architecture](#ai-architecture)
-- [Variant Deep Dive](#variant-deep-dive)
-- [Maps and Default Startup](#maps-and-default-startup)
-- [Configuration Highlights](#configuration-highlights)
-- [Respawn and Progression Patterns](#respawn-and-progression-patterns)
-- [Troubleshooting](#troubleshooting)
-- [Known Gaps and Next Improvements](#known-gaps-and-next-improvements)
+1. [Overview](#overview)
+2. [Core Architecture](#core-architecture)
+3. [Guard States](#guard-states)
+4. [AI Components](#ai-components)
+5. [Character Systems](#character-systems)
+6. [Behavior Tree Integration](#behavior-tree-integration)
+7. [Suspicion System](#suspicion-system)
+8. [Communication System](#communication-system)
+9. [Configuration & Tuning](#configuration--tuning)
+10. [Debug Tools](#debug-tools)
+11. [API Reference](#api-reference)
 
-## Project Goals
+---
 
-- Demonstrate reusable Unreal gameplay architecture across multiple genres/modes in one codebase.
-- Showcase `Enhanced Input` workflows for desktop and touch-friendly controls.
-- Showcase `StateTree` AI workflows in practical gameplay scenarios.
-- Keep systems modular enough to be remixed for learning and rapid prototyping.
+## Overview
 
-## Current Gameplay Variants
+The Stealth Variant system implements a multi-layered guard AI system with the following key features:
 
-1. **Combat (Third-person melee)**
-   - Combo and charged attacks.
-   - Enemy danger notifications and reactions.
-   - Damage, knockback, life bars, death/respawn.
-   - Enemy spawning waves via activatable spawners.
+- **Dynamic Suspicion Mechanics**: Guards accumulate suspicion based on visibility, distance, and line-of-sight to targets
+- **Five-State Guard FSM**: Patrol → Investigate → Alert → Chase, with external alert integration
+- **AI Perception**: Sight-based perception with configurable ranges and peripheral vision
+- **Inter-Agent Communication**: Guards broadcast alerts to nearby allies through the AI Communication Component
+- **Behavior Tree-Driven**: Data-driven decision-making through Unreal's Behavior Tree system
+- **Blueprint-Friendly**: Most parameters are editable in editor with real-time updates
+- **Gameplay Debugger Integration**: In-game visualization of guard state, suspicion, and targets
 
-2. **Platforming (Third-person traversal)**
-   - Hold jump, coyote time, double jump, wall jump.
-   - Directional dash with cooldown/land reset behavior.
+### Key Systems
 
-3. **Side-scrolling (2.5D platformer)**
-   - Plane-constrained movement.
-   - Wall jump, coyote time, soft-platform drop logic.
-   - Interactions, pickups, NPC interactions, simple UI counters.
+| System | Purpose |
+|--------|---------|
+| **AStealthAIController** | Brain of the guard; manages perception, state transitions, and blackboard |
+| **AStealthGuardCharacter** | Physical representation; handles movement speeds and equipment (headlamp) |
+| **AMyCharacter** | Player character with perception stimuli source for stealth gameplay |
+| **APatrolRoute** | Visual editor tool for designing guard patrol paths |
+| **UAICommunicationComponent** | Enables guards to broadcast and receive alerts |
+| **Behavior Tree Services** | Continuous logic for suspicion updates, target confirmation, and state management |
+| **Gameplay Debugger** | Real-time visualization of AI decision-making |
 
-4. **Stealth Prototype (content-level only in current source view)**
-   - Default startup map currently points to a stealth prototype level.
+---
 
-## Tech Stack
+## Core Architecture
 
-- **Engine:** Unreal Engine `5.7` (from `AdvancedAIDemo.uproject`)
-- **Language:** C++ (with Blueprint extension points)
-- **Core Modules:**
-  - `EnhancedInput`
-  - `AIModule`
-  - `StateTreeModule`
-  - `GameplayStateTreeModule`
-  - `UMG` / `Slate`
-  - `GameplayDebugger`
-- **Project Module:** `AdvancedAIDemo` (runtime)
+### Controller Hierarchy
 
-## Project Layout
-
-```text
-AdvancedAIDemo/
-  Config/
-  Content/
-    Variant_Combat/
-    Variant_Platforming/
-    Variant_SideScrolling/
-    Stealth/
-    ThirdPerson/
-  Source/
-    AdvancedAIDemo/
-      Variant_Combat/
-        AI/
-        Animation/
-        Gameplay/
-        Interfaces/
-        UI/
-      Variant_Platforming/
-        Animation/
-      Variant_SideScrolling/
-        AI/
-        Gameplay/
-        Interfaces/
-        UI/
-  Plugins/
-    VisualStudioTools/
+```
+AAIController
+    └── AAStealthAIController (IAIAlertReceiver)
+            ├── AIPerceptionComponent (Sight sense)
+            ├── Blackboard (AI state/decisions)
+            └── BehaviorTree (Logic flow)
 ```
 
-### Key C++ Entry Areas
+### Component Relationships
 
-- `Source/AdvancedAIDemo/AdvancedAIDemo.Build.cs` - module dependencies/include paths.
-- `Source/AdvancedAIDemo/Variant_Combat` - combat character, enemy AI, spawners, combat interfaces.
-- `Source/AdvancedAIDemo/Variant_Platforming` - traversal-heavy movement character/controller.
-- `Source/AdvancedAIDemo/Variant_SideScrolling` - side-scrolling movement, interactions, pickups, NPC AI.
+```
+AAStealthGuardCharacter
+    ├── AAStealthAIController (possesses)
+    ├── USpotLightComponent (HeadLamp - visual equipment)
+    └── UAICommunicationComponent (broadcast/receive alerts)
 
-## Requirements
-
-- Unreal Engine `5.7` installed and associated with this project.
-- Windows 64-bit target for the current workspace setup.
-- C++ build toolchain compatible with your Unreal installation (typically Visual Studio + MSVC workloads used by UE).
-
-## Getting Started
-
-### 1) Open in Unreal Editor
-
-- Open `AdvancedAIDemo.uproject`.
-- If prompted, generate project files and build the C++ module.
-- Launch in-editor and use map selection to switch between variants.
-
-### 2) Recommended first maps
-
-- Combat: `Content/Variant_Combat/Lvl_Combat.umap`
-- Platforming: `Content/Variant_Platforming/Lvl_Platforming.umap`
-- Side-scrolling: `Content/Variant_SideScrolling/Lvl_SideScrolling.umap`
-
-### 3) Default startup behavior
-
-From `Config/DefaultEngine.ini`:
-
-- `GameDefaultMap=/Game/Stealth/Levels/Lvl_Prototype`
-- `EditorStartupMap=/Game/Stealth/Levels/Lvl_Prototype`
-
-So the editor/game will currently boot to the stealth prototype level unless changed in project settings.
-
-## Build and Run (Optional CLI)
-
-If you prefer command-line builds, use Unreal Build Tool from your UE installation. Paths vary by machine, so update paths to match your setup.
-
-```powershell
-# Example only - update Unreal installation path/version as needed
-& "C:\Program Files\Epic Games\UE_5.7\Engine\Build\BatchFiles\Build.bat" AdvancedAIDemoEditor Win64 Development "C:\Users\odin\Documents\Unreal Projects\AdvancedAIDemo\AdvancedAIDemo.uproject"
+AAMyCharacter (Player)
+    └── UAIPerceptionStimuliSourceComponent (registers as hearing source)
 ```
 
-To launch from editor binaries (example path may differ):
+### Data Flow
 
-```powershell
-& "C:\Program Files\Epic Games\UE_5.7\Engine\Binaries\Win64\UnrealEditor.exe" "C:\Users\odin\Documents\Unreal Projects\AdvancedAIDemo\AdvancedAIDemo.uproject"
+```
+1. Perception Events (Sight)
+   ↓
+2. Blackboard Update (TargetActor, SuspectedActor, HasLos, InvestigateLocation)
+   ↓
+3. Behavior Tree Services (Update Suspicion, Confirm Target, Change State)
+   ↓
+4. State Transition (UpdateGuardState method)
+   ↓
+5. Character Movement Speed & AI Behavior Adjustment
+   ↓
+6. Communication Broadcasts (if target confirmed)
 ```
 
-## Input System
+---
 
-All three playable variants use `Enhanced Input` through their player controllers and character classes.
+## Guard States
 
-### Shared Input Pattern
+Guards operate in a five-state finite state machine. States are controlled by `UpdateGuardState()` and stored in the `"State"` blackboard key as an `EStealthGuardState` enum.
 
-- Player controllers add one or more `UInputMappingContext` assets at runtime.
-- Variants support mobile/touch UI overlays when touch controls should be active.
-- Characters expose `Do*` methods (`DoMove`, `DoJumpStart`, etc.) so both hardware input and UI controls can route through the same gameplay logic.
+### EStealthGuardState Enumeration
 
-### Action Names by Variant (from C++)
+```cpp
+enum class EStealthGuardState : uint8
+{
+    Null          // Invalid/uninitialized
+    Patrol        // Following patrol route passively
+    Investigate   // Actively investigating suspicion location
+    Alert         // High alert searching for target (lost LOS recently)
+    Chase         // Pursuing confirmed target with active line-of-sight
+    Debug         // Debug/testing state
+};
+```
 
-**Combat character actions**
+### State Behavior Breakdown
 
-- `MoveAction`
-- `LookAction`
-- `MouseLookAction`
-- `ComboAttackAction`
-- `ChargedAttackAction`
-- `ToggleCameraAction`
+#### **Patrol** (Suspicion < 0.2)
+- **Trigger**: Default state when calm
+- **Guard Movement**: `PatrolSpeed` (200 UU/s)
+- **Behavior**: Follows `PatrolRoute` waypoints in sequence
+- **Perception**: Active sight sense, scanning surroundings
+- **Communication**: Inactive
+- **Transition Conditions**:
+  - → **Investigate**: If suspicion >= 0.2
+  - → **Alert**: If external alert received
+  - → **Chase**: If target acquired with LOS
 
-**Platforming character actions**
+#### **Investigate** (Suspicion ≥ 0.2 AND no confirmed target)
+- **Trigger**: Guard becomes suspicious of something
+- **Guard Movement**: `InvestigateSpeed` (300 UU/s)
+- **Behavior**: 
+  - Moves toward `InvestigateLocation` (last known suspect position)
+  - Performs "Look Around" actions (scanning head/body)
+  - Suspicion decays slowly while in this state
+- **Perception**: Active sight sense with focus on investigation area
+- **Communication**: May broadcast if highly suspicious
+- **Transition Conditions**:
+  - → **Patrol**: If suspicion decays below 0.2
+  - → **Chase**: If target confirmed (distance < ConfirmDistance or Suspicion >= ConfirmSuspicion)
+  - → **Alert**: If external alert interrupts
 
-- `MoveAction`
-- `LookAction`
-- `MouseLookAction`
-- `JumpAction`
-- `DashAction`
+#### **Alert** (Recently chasing OR external alert active)
+- **Trigger**: 
+  - Lost target recently (within 5 seconds of losing LOS)
+  - External alert received and still active
+- **Guard Movement**: `AlertSpeed` (400 UU/s)
+- **Behavior**: 
+  - Searches last known location
+  - May look around intensively
+  - High vigilance posture
+- **Perception**: Active heightened sight sense
+- **Communication**: Broadcasting to allies
+- **Transition Conditions**:
+  - → **Chase**: If target re-acquired
+  - → **Investigate**: If alert window expires and suspicion remains
+  - → **Patrol**: If alert window expires and suspicion too low
 
-**Side-scrolling character actions**
+#### **Chase** (bHasTarget == true AND bHasLOS == true)
+- **Trigger**: Target acquired with visual confirmation
+- **Guard Movement**: `ChaseSpeed` (600 UU/s)
+- **Behavior**: 
+  - Direct pursuit of target
+  - Maintains line-of-sight focus
+  - Updates "LastSeenTime" continuously
+- **Perception**: Active sight sense tracking confirmed target
+- **Communication**: Broadcasts to allies
+- **Combat**: (Optional - framework supports combat integration)
+- **Transition Conditions**:
+  - → **Alert**: If line-of-sight lost
+  - → **Patrol**: If alert window expires and target not re-found
 
-- `MoveAction`
-- `JumpAction`
-- `DropAction`
-- `InteractAction`
+#### **Debug** (Utility state)
+- **Trigger**: Developer/testing mode
+- **Guard Movement**: `DebugSpeed` (2000 UU/s - allows rapid testing)
+- **Behavior**: Bypasses normal state logic for testing
 
-> Note: concrete keyboard/gamepad key bindings are stored in Enhanced Input assets (Content), not directly in the C++ shown here.
+---
 
-## AI Architecture
+## AI Components
 
-The project uses Unreal `StateTree` for AI decision/control layers.
+### AAStealthAIController
 
-### Combat AI
+The brain of the guard AI system. Extends `AAIController` and implements `IAIAlertReceiver` for inter-agent communication.
 
-Core classes:
+#### Key Properties
 
-- `ACombatAIController` - AIController with `UStateTreeAIComponent`.
-- `ACombatEnemy` - AI-controlled melee enemy implementing attacker/damageable interfaces.
-- `CombatStateTreeUtility.*` - custom StateTree tasks and conditions.
+```cpp
+// Core Assets
+UBehaviorTree* BehaviorTreeAsset           // BT to execute
+UBlackboardComponent* Blackboard           // AI decision data
+UAIPerceptionComponent* AiPerceptionComponent
+UAISenseConfig_Sight* AiSightConfig
 
-Custom StateTree logic includes:
+// Perception Configuration
+float SightRadius                = 3500.f  // How far guards can see
+float LoseSightRadius            = 4000.f  // How far before losing target
+float PeripheralVisionAngleDeg   = 90.f    // Cone of vision (±45°)
+float MaxAgeSeconds              = 5.0f    // How long to remember stale stimuli
+```
 
-- Grounded checks.
-- Incoming danger checks with reaction windows/cone tests.
-- Attack tasks for combo and charged attacks.
-- Utility tasks for facing actors/locations, speed changes, and player info gathering.
-- Landing wait tasks and delegates to sync animation/state transitions.
+#### Suspicion System Tuning
 
-Combat ecosystem helpers:
+```cpp
+// Suspicion Gain Parameters
+float SuspicionMaxGainDistance   = 2500.f  // Distance at which suspicion gain is max
+float SuspicionMinDot            = 0.4f    // Dot product threshold for suspicion gain
+float SuspicionBaseGainPerSecond = 0.6f    // Max suspicion gained per second (when close/centered)
+float SuspicionDecayPerSecond    = 0.25f   // How fast suspicion decays when not suspicious
 
-- `ACombatEnemySpawner` spawns enemies sequentially and can activate linked actors when depleted.
-- EQS context helpers (`EnvQueryContext_Player`, `EnvQueryContext_Danger`) support AI queries.
+// Target Confirmation Parameters
+float ConfirmDistance            = 600.f   // Distance to confirm target without high suspicion
+float ConfirmSuspicion           = 0.95f   // Suspicion threshold to auto-confirm target
 
-### Side-scrolling AI
+// Patrol Configuration
+int8 StartingPatrolIndex         = 0       // Which patrol point to start at
+```
 
-Core classes:
+#### External Alert System
 
-- `ASideScrollingAIController` - AIController with `UStateTreeAIComponent`.
-- `ASideScrollingNPC` - interactable AI character with temporary deactivation behavior.
-- `SideScrollingStateTreeUtility.*` - task to locate/evaluate player target distance.
+```cpp
+float ExternalAlertHoldSeconds   = 4.0f    // How long to maintain alert state from external broadcasts
+```
 
-## Variant Deep Dive
+#### Core Methods
 
-### Combat Variant
+**`ReceiveAIAlert(const FAIAlertData& AlertData)`**
+- Interface implementation for receiving alerts from other guards
+- Updates blackboard with alert information
+- Raises suspicion based on alert strength
+- Maintains alert state for duration specified
 
-Key systems in `Source/AdvancedAIDemo/Variant_Combat`:
+**`OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)`**
+- Callback from perception system
+- Distinguishes sight vs. hearing events
+- Updates `HasLos`, `TargetActor`, `SuspectedActor`, `InvestigateLocation` blackboard keys
 
-- **Melee combo pipeline** using montage sections and cached input windows.
-- **Charged attack pipeline** with hold/release behavior and loop section checks.
-- **Damage model** with HP, life bar widgets, knockback impulses, partial ragdoll reactions.
-- **Danger broadcast** so nearby enemies can react before attacks land.
-- **Respawn flow** where character destruction triggers controller-driven respawn at checkpoint transform.
+**`UpdateGuardState()`**
+- Called by `BTService_ChangeState` every 0.15 seconds
+- Implements state machine logic based on blackboard values
+- Transitions between Patrol → Investigate → Alert → Chase
+- Handles external alert timing
+- Stores result in `"State"` blackboard key
 
-Important interfaces:
+#### Blackboard Keys
 
-- `ICombatAttacker`
-- `ICombatDamageable`
-- `ICombatActivatable`
+| Key | Type | Purpose |
+|-----|------|---------|
+| `TargetActor` | Object | Currently confirmed target (non-null = Chase state) |
+| `SuspectedActor` | Object | Suspected but unconfirmed target |
+| `InvestigateLocation` | Vector | Location to investigate (last known suspect position) |
+| `HasLos` | Bool | Does guard have line-of-sight to suspected actor |
+| `Suspicion` | Float | Current suspicion level (0.0 - 1.0) |
+| `InvestigateActive` | Bool | Is investigation currently active |
+| `PatrolActor` | Object | Current patrol route (reference) |
+| `PatrolIndex` | Int | Current waypoint in patrol route |
+| `State` | Enum | Current guard state (EStealthGuardState) |
+| `LastSeenTime` | Float | World time when target was last confirmed |
+| `ExternalAlertUntil` | Float | World time until external alert expires |
 
-### Platforming Variant
+---
 
-Key systems in `Source/AdvancedAIDemo/Variant_Platforming`:
+### AAStealthGuardCharacter
 
-- **Multi-jump behavior**: regular jump, coyote-time jump, double jump, wall jump.
-- **Wall jump detection** via forward sphere sweep.
-- **Dash behavior** with gravity disable/restore and montage-driven dash end.
-- **Movement-state tracking** using compact flags and timers.
-- **Respawn flow** through controller that respawns at `PlayerStart`.
+Physical character representation for guards. Extends `ACharacter` and provides movement speed management.
 
-### Side-scrolling Variant
+#### Components
 
-Key systems in `Source/AdvancedAIDemo/Variant_SideScrolling`:
+```cpp
+// Equipment
+USpotLightComponent* HeadLamp
+    └── Attached to "headLampSocket" on skeleton
+    ├── Intensity: 20000
+    ├── AttenuationRadius: 1500 UU
+    └── Visual feedback for guard presence
 
-- **2.5D movement** constrained to a movement plane.
-- **Advanced jump behavior**: coyote-time, double jump, wall jump lockout.
-- **Drop-through platform logic** with soft collision checks.
-- **Interaction traces** for NPCs/world interactables.
-- **Pickups + UI counter** via `ASideScrollingGameMode` and `USideScrollingUI`.
-- **Respawn flow** through controller that respawns at `PlayerStart`.
+// Communication
+UAICommunicationComponent* AIComms
+    └── Broadcasts alerts to nearby guards
+    └── Radius: 2000 UU (configurable)
+```
 
-## Maps and Default Startup
+#### Movement Speeds
 
-Detected map assets:
+| State | Speed | Usage |
+|-------|-------|-------|
+| `PatrolSpeed` | 200 UU/s | Casual patrolling |
+| `InvestigateSpeed` | 300 UU/s | Active searching |
+| `AlertSpeed` | 400 UU/s | High alert searching |
+| `ChaseSpeed` | 600 UU/s | Direct pursuit |
+| `DebugSpeed` | 2000 UU/s | Developer testing |
 
-- `Content/Variant_Combat/Lvl_Combat.umap`
-- `Content/Variant_Platforming/Lvl_Platforming.umap`
-- `Content/Variant_SideScrolling/Lvl_SideScrolling.umap`
-- `Content/Stealth/Levels/Lvl_Prototype.umap`
-- `Content/ThirdPerson/Lvl_ThirdPerson.umap`
+#### Speed-Setting Methods
 
-Current default startup map (from config):
+```cpp
+void SetPatrolSpeed();       // CharacterMovement->MaxWalkSpeed = 200
+void SetInvestigateSpeed();  // CharacterMovement->MaxWalkSpeed = 300
+void SetAlertSpeed();        // CharacterMovement->MaxWalkSpeed = 400
+void SetChaseSpeed();        // CharacterMovement->MaxWalkSpeed = 600
+void SetDebugSpeed();        // CharacterMovement->MaxWalkSpeed = 2000
+```
 
-- `Stealth/Levels/Lvl_Prototype`
+These are called from behavior tree tasks or services to transition movement speeds during state changes.
 
-## Configuration Highlights
+#### Blueprint Integration
 
-From `Config/DefaultEngine.ini` and related config:
+The character is designed to be blueprinted with:
+- Custom skeletal mesh
+- Animation blueprints (idling, walking, running, investigating)
+- Socket definitions (headLampSocket, gun socket, etc.)
+- Material instances for visual feedback
 
-- Desktop-targeted project with DX12 default RHI.
-- Ray tracing and Lumen-related settings enabled in project config.
-- `GameplayDebugger` category keys customized.
-- Redirects included for renamed classes/enums from older template or prior naming.
-- `EnhancedInput` classes configured as defaults in `DefaultInput.ini`.
+---
 
-## Respawn and Progression Patterns
+### AAMyCharacter
 
-- **Combat:** character stores checkpoint-like transform in `ACombatPlayerController`; on death the pawn is destroyed and controller respawns `CharacterClass` at saved transform.
-- **Platforming/Side-scrolling:** controllers respawn pawn at first `APlayerStart` actor.
-- **Side-scrolling pickups:** collected pickups increment game mode counter and update/show UI.
+Player character implementation with perception stimuli capabilities for stealth gameplay.
 
-## Troubleshooting
+#### Key Features
 
-- If input appears inactive:
-  - Verify the variant's mapping contexts are assigned in the active player controller Blueprint/class defaults.
-  - Confirm you are possessing the expected variant character class.
-- If touch UI appears unexpectedly:
-  - Check `bForceTouchControls` in the active player controller defaults/config.
-- If respawn does not happen:
-  - Confirm `CharacterClass` is assigned on the player controller.
-  - Verify pawn destruction delegates are wired (happens in `OnPossess`).
-- If AI seems idle:
-  - Check controller possession and assigned StateTree assets in Blueprint defaults.
+```cpp
+// Perception Registration
+UAIPerceptionStimuliSourceComponent* PerceptionStimuliSourceComponent
+    └── Automatically registers for UAISense_Hearing
+    └── Makes player "audible" to guards
 
-## Known Gaps and Next Improvements
+// Camera System
+USpringArmComponent* CameraBoom        // Third-person camera arm
+UCameraComponent* FollowCamera         // Third-person follow camera
 
-- Add explicit setup docs for required Blueprint asset assignments (mapping contexts, montages, UI widget classes, AI StateTrees).
-- Add per-variant control tables with concrete key/gamepad bindings from Enhanced Input assets.
-- Add automated gameplay tests or functional test maps for jump/combat/AI regressions.
-- Add packaged build instructions (Development/Shipping) and CI pipeline notes.
-- Add architecture diagrams for variant boundaries and shared systems.
+// Movement
+MaxWalkSpeed: 500.f
+JumpZVelocity: 500.f
+AirControl: 0.35f
+```
+
+#### Gameplay Mechanics
+
+- **Enhanced Input System**: Supports modern input actions (Jump, Move, Look, MouseLook)
+- **Team Affiliation**: Set to team ID 2 (vs. guards on team 1)
+- **Stimulus Broadcasting**: Player movement generates hearing stimuli for guards (framework ready)
+- **Third-Person Camera**: Classic follow camera with spring arm collision
+
+---
+
+## Behavior Tree Integration
+
+The system uses Unreal's Behavior Tree system for guard logic orchestration. The BT architecture follows this pattern:
+
+```
+BehaviorTree Root
+├── Services (Continuous execution)
+│   ├── BTService_Suspicion (Update suspicion based on perception)
+│   ├── BTService_ChangeState (Update FSM state)
+│   └── BTService_ConfirmTarget (Confirm suspected actors as targets)
+└── Task Selection (State-dependent execution)
+    ├── Patrol Tasks (Follow waypoints, idle)
+    ├── Investigate Tasks (Move to location, look around)
+    ├── Alert Tasks (Search, look around, broadcast)
+    └── Chase Tasks (Direct pursuit, optional combat)
+```
+
+### Service-Based Architecture
+
+Services are "passive" nodes that continuously update AI state without blocking execution. They run every `Interval` seconds (typically 0.15s).
+
+#### BTService_ChangeState
+
+- **Interval**: 0.15 seconds
+- **Purpose**: Call `UpdateGuardState()` to manage FSM transitions
+- **Result**: Updates `"State"` blackboard key
+- **Implementation**: Simple wrapper around controller's `UpdateGuardState()`
+
+#### BTService_ConfirmTarget
+
+- **Interval**: 0.15 seconds
+- **Purpose**: Confirm suspected actors as actual targets
+- **Logic**:
+  ```cpp
+  if (HasLos && SuspectedActor != null)
+  {
+      float Distance = Distance(Guard, Suspect);
+      float Suspicion = BB->GetValue("Suspicion");
+      
+      if (Distance <= ConfirmDistance || Suspicion >= ConfirmSuspicion)
+      {
+          BB->SetValue("TargetActor", Suspect);
+          BB->SetValue("Suspicion", 1.0f);
+          
+          // Broadcast to allies!
+          Guard->AIComms->BroadcastAlert(Confirmed, Location, 1.0f);
+      }
+  }
+  ```
+- **Communication**: Broadcasts confirmed targets to nearby guards
+
+#### BTService_Suspicion
+
+- **Interval**: 0.15 seconds
+- **Purpose**: Update suspicion based on visual perception
+- **Gain Conditions**:
+  - Guard has line-of-sight to suspected actor
+  - Actor is within `SuspicionMaxGainDistance`
+  - Actor is within peripheral vision (adjusted by dot product)
+- **Gain Formula**:
+  ```cpp
+  SuspicionGain = BaseGainPerSecond * DistanceFactor * AngleFactor * DeltaTime
+  
+  DistanceFactor = clamp(1.0 - (Distance / MaxGainDistance), 0, 1)
+  AngleFactor = clamp((Dot - MinDot) / (1.0 - MinDot), 0, 1)
+  ```
+- **Decay**:
+  - Without LOS in non-Investigate state: `DecayPerSecond`
+  - In Investigate state without LOS: `DecayPerSecond * 0.5` (slower decay)
+  - Final value clamped to [0, 1]
+
+---
+
+## Suspicion System
+
+The suspicion system is the **core decision-making driver** of the stealth gameplay. It creates the nuanced guard behavior that makes stealth satisfying.
+
+### Suspicion Mechanics
+
+Suspicion is a float value in the range **[0.0, 1.0]** that represents how suspicious a guard is of the player.
+
+### Suspicion Accumulation
+
+**Conditions for Suspicion Gain:**
+1. Guard has **line-of-sight** to player
+2. Player is within **SuspicionMaxGainDistance** (2500 UU)
+3. Player is within **peripheral vision cone** (modified by MinDot threshold)
+
+**Gain Calculation Per Frame:**
+
+```cpp
+// Distance factor: max gain when close, zero at max distance
+DistanceFactor = clamp(1.0 - (Distance / SuspicionMaxGainDistance), 0, 1)
+
+// Angle factor: max gain when directly ahead, less at edges
+Dot = ForwardVector · DirectionToPlayer
+AngleFactor = clamp((Dot - SuspicionMinDot) / (1 - SuspicionMinDot), 0, 1)
+
+// Combined gain
+SuspicionGain = SuspicionBaseGainPerSecond * DistanceFactor * AngleFactor * DeltaTime
+```
+
+### Default Suspicion Thresholds
+
+| Level | Value | Behavior |
+|-------|-------|----------|
+| Calm | 0.0 - 0.2 | Patrol state, no suspicion |
+| Suspicious | 0.2 - 0.8 | Investigate state, searching |
+| Highly Suspicious | 0.8 - 0.95 | Alert state, active search |
+| Confirmed | ≥ 0.95 | Chase state, or by proximity |
+
+### Suspicion Decay
+
+**Without Line-of-Sight:**
+```cpp
+SuspicionDecay = SuspicionDecayPerSecond * DeltaTime
+
+// In Investigate state, decay is halved (more persistent investigation)
+SuspicionDecay = (SuspicionDecayPerSecond * 0.5) * DeltaTime
+```
+
+### Gameplay Implications
+
+- **Short Distance**: Guards accumulate suspicion quickly (high DistanceFactor)
+- **Peripheral Vision**: Guards miss targets outside their viewing cone (AngleFactor)
+- **Investigate State**: Suspicion decays slower, encouraging guards to search thoroughly
+- **Recent Chase**: Guards remain in Alert state for 5 seconds even without suspicion (AlertAfterChaseWindow)
+
+### Player Stealth Strategies
+
+Given these mechanics, stealth players can:
+
+1. **Stay Behind**: Remain outside peripheral vision (low AngleFactor)
+2. **Keep Distance**: Maintain distance > SuspicionMaxGainDistance (low DistanceFactor)
+3. **Crouch/Hide**: Break line-of-sight (no LOS = no gain)
+4. **Time Patrols**: Wait for guards to turn away before moving
+5. **Create Distractions**: Make guards investigate elsewhere
+6. **Use Elevation**: Get above guard's peripheral vision
+
+---
+
+## Communication System
+
+Guards can broadcast alerts to nearby allies through the **AI Communication System**. This creates emergent gameplay where confirmed targets trigger chain reactions.
+
+### UAICommunicationComponent
+
+**Broadcast Range**: `AlertRadius` (2000 UU default)
+- Guards within this radius who implement `IAIAlertReceiver` will receive broadcasts
+
+**Broadcast Cooldown**: `BroadcastCooldownSeconds` (1.0s default)
+- Prevents spam of multiple broadcasts in quick succession
+- Guards broadcast again only if cooldown elapsed
+
+### Alert Types
+
+```cpp
+enum class EAIAlertType : uint8
+{
+    Suspicious      // "Something might be here"
+    Confirmed       // "I see the player!"
+    LostTarget      // "They got away"
+    BodyFound       // "There's a body here" (framework extensible)
+};
+```
+
+### FAIAlertData Structure
+
+```cpp
+struct FAIAlertData
+{
+    EAIAlertType Type;              // Alert category
+    FVector WorldLocation;          // Where the alert occurred
+    TWeakObjectPtr<AActor> Sender;  // Which guard sent it
+    float Strength;                 // Alert strength (0.0-1.0)
+    float TimeStampSeconds;         // When it occurred
+    TWeakObjectPtr<AActor> TargetActor;  // (Optional) confirmed target
+};
+```
+
+### Broadcast Flow
+
+1. **Guard Confirms Target** (in `BTService_ConfirmTarget`)
+   ```cpp
+   Guard->AIComms->BroadcastAlert(
+       EAIAlertType::Confirmed, 
+       TargetLocation, 
+       1.0f  // Full strength
+   );
+   ```
+
+2. **Communication Component Broadcasts**
+   - Performs overlap query with `AlertRadius`
+   - Filters results (can require LOS, skip self, etc.)
+   - For each pawn found:
+     - If pawn has AIController, forward to controller
+     - Call `ReceiveAIAlert()` on controller if implements interface
+
+3. **Receiving Guard Processes Alert**
+   ```cpp
+   bool AAStealthAIController::ReceiveAIAlert(const FAIAlertData& AlertData)
+   {
+       // Ignore if already chasing with LOS
+       if (bHasTarget && bHasLOS && AlertData.Type != Confirmed)
+           return false;
+       
+       // Update investigation location
+       BB->SetValue("InvestigateLocation", AlertData.WorldLocation);
+       
+       // Raise suspicion
+       BB->SetValue("Suspicion", Max(CurrentSuspicion, AlertData.Strength));
+       
+       // Hold alert state for duration
+       if (AlertData.Type == Confirmed)
+           BB->SetValue("ExternalAlertUntil", Now + ExternalAlertHoldSeconds);
+       
+       return true;
+   }
+   ```
+
+4. **Receiving Guard Transitions**
+   - Receiving alert raises suspicion/investigation location
+   - Guard naturally transitions through Investigate → Alert → Chase as they search
+   - Creates coordinated multi-guard responses to player
+
+### Configuration
+
+In `AICommunicationComponent`:
+
+```cpp
+UPROPERTY(EditAnywhere, Category="AI|Communication")
+float AlertRadius = 2000.f;  // How far alerts broadcast
+
+UPROPERTY(EditAnywhere, Category="AI|Communication")
+float BroadcastCooldownSeconds = 1.0f;  // Cooldown between broadcasts
+
+UPROPERTY(EditAnywhere, Category="AI|Communication")
+bool bSkipSelf;  // Don't alert sender
+
+UPROPERTY(EditAnywhere, Category="AI|Communication")
+bool bRequireLineOfSightToReceiver = false;  // LOS requirement (not used by default)
+```
+
+---
+
+## Patrol Route System
+
+### APatrolRoute
+
+A visual editor-friendly patrol system for designing guard paths. Guards follow waypoints in sequence, looping when complete.
+
+#### Design Approach
+
+Instead of hard-coded patrol points, **guards are assigned a `PatrolRoute` actor** in the world. This enables:
+- **Visual editing**: Drag points in viewport
+- **Per-instance variation**: Different guards follow different routes
+- **Easy iteration**: Adjust routes without recompiling
+- **Flexible sizing**: Any number of points
+
+#### Key Features
+
+```cpp
+// Configuration
+UPROPERTY(EditAnywhere, BlueprintReadOnly)
+int32 PointCount = 5;  // How many points in this route
+
+// Auto-Generated Points
+UPROPERTY(VisibleAnywhere, Instanced)
+TArray<TObjectPtr<USceneComponent>> PatrolPoints;  // 0..PointCount-1
+
+// Utility
+TArray<FVector> GetPatrolPointsLocations() const;
+```
+
+#### Usage in AI
+
+1. **Assign Route in Editor**
+   ```
+   AStealthGuardCharacter -> PatrolRoute = (drag in APatrolRoute actor)
+   ```
+
+2. **Controller Initializes Patrol**
+   ```cpp
+   // In OnPossess()
+   int8 MaxPatrolIndex = Guard->PatrolRoute->PointCount;
+   BB->SetValueAsInt("PatrolIndex", FMath::RandRange(0, MaxPatrolIndex - 1));
+   ```
+
+3. **Behavior Tree Executes Patrol**
+   ```
+   BT Task: Move To PatrolRoute[PatrolIndex]
+   BT Task: Increment PatrolIndex (wrap to 0 at end)
+   Repeat
+   ```
+
+#### Editor Features
+
+- **OnConstruction()**: Rebuilds points when `PointCount` property changes
+- **PostEditChangeProperty()**: Responds to editor changes in real-time
+- **Debug Visualization**: Console variable `patrolpoints.debug.show` displays patrol route with green spheres and connecting lines
+
+#### Debug Visualization
+
+Enable patrol route visualization:
+```
+patrolpoints.debug.show 1  // In console or launch config
+```
+
+This draws:
+- Green spheres at each patrol point
+- Yellow lines connecting sequential points
+- Updates in real-time as game runs
+
+---
+
+## Configuration & Tuning
+
+All guard parameters are **configurable per-instance** in the editor for rapid iteration. Key tuning locations:
+
+### Guard-Level Tuning (AAStealthAIController)
+
+Set these values on each guard instance:
+
+```cpp
+// === Perception ===
+AiSightConfig->SightRadius = 3500.f;              // Detection range
+AiSightConfig->LoseSightRadius = 4000.f;          // Range where guard forgets target
+AiSightConfig->PeripheralVisionAngleDegrees = 90.f;  // ±45° vision cone
+
+// === Suspicion Gain ===
+SuspicionMaxGainDistance = 2500.f;     // Distance for max suspicion gain
+SuspicionMinDot = 0.4f;                // Cos(angle) threshold for peripheral vision
+SuspicionBaseGainPerSecond = 0.6f;     // Max gain rate when close & centered
+
+// === Suspicion Decay ===
+SuspicionDecayPerSecond = 0.25f;       // Decay rate without LOS
+
+// === Target Confirmation ===
+ConfirmDistance = 600.f;               // Auto-confirm distance
+ConfirmSuspicion = 0.95f;              // Auto-confirm suspicion threshold
+
+// === Patrol ===
+StartingPatrolIndex = 0;               // Which point to start on
+
+// === Communication ===
+ExternalAlertHoldSeconds = 4.0f;       // Duration of external alert state
+```
+
+### Character-Level Tuning (AAStealthGuardCharacter)
+
+```cpp
+// === Movement Speeds ===
+PatrolSpeed = 200.f;         // Casual patrolling
+InvestigateSpeed = 300.f;    // Active searching
+AlertSpeed = 400.f;          // High alert
+ChaseSpeed = 600.f;          // Full pursuit
+
+// === Equipment ===
+HeadLamp->Intensity = 20000.f;
+HeadLamp->AttenuationRadius = 1500.f;
+```
+
+### Communication Tuning (UAICommunicationComponent)
+
+```cpp
+AlertRadius = 2000.f;                  // Broadcast range
+BroadcastCooldownSeconds = 1.0f;       // Throttle rate
+bSkipSelf = true;                      // Don't alert broadcaster
+bRequireLineOfSightToReceiver = false;  // LOS not required
+```
+
+### Behavior Tree Services
+
+Modify service intervals for different update rates:
+
+```cpp
+// BTService_ChangeState, BTService_ConfirmTarget, BTService_Suspicion
+Interval = 0.15f;  // Updates 6-7 times per second (good balance)
+```
+
+### Typical Tuning Scenarios
+
+**"Paranoid Guards"** - Increase gain, decrease decay:
+```cpp
+SuspicionMaxGainDistance = 3500.f;     // See farther
+SuspicionBaseGainPerSecond = 1.0f;     // Gain faster
+SuspicionDecayPerSecond = 0.1f;        // Remember longer
+```
+
+**"Oblivious Guards"** - Opposite settings:
+```cpp
+SuspicionMaxGainDistance = 1500.f;
+SuspicionBaseGainPerSecond = 0.2f;
+SuspicionDecayPerSecond = 0.5f;
+```
+
+**"Coordinated Squad"** - Fast communication:
+```cpp
+AlertRadius = 3000.f;                  // Broadcast farther
+ExternalAlertHoldSeconds = 6.0f;       // Longer alert state
+```
+
+---
+
+## Debug Tools
+
+### Gameplay Debugger Integration
+
+The system includes a custom Gameplay Debugger category for in-game monitoring.
+
+#### FGameplayDebuggerCategory_Suspicion
+
+Displays real-time guard AI information when using the Gameplay Debugger (`Apostrophe key to toggle, then select guard`).
+
+**Displayed Information:**
+
+```
+State: {current guard state}
+HasLOS: {true/false}    HasTarget: {true/false}
+Target: {target actor name}    Suspect: {suspected actor name}
+Suspicion: {0.00 - 1.00}
+Suspicion Range: {max distance}
+Confirm Range: {distance}  (ConfirmSuspicion: {threshold})
+ExternalAlert: ACTIVE  ({remaining time})
+Comms Range: {radius} Cooldown: {seconds until ready}
+```
+
+#### Enabling Gameplay Debugger
+
+```cpp
+// Compile with:
+#if WITH_GAMEPLAY_DEBUGGER
+// Debugger features enabled
+#endif
+
+// In-game:
+- Press Apostrophe key to open debugger
+- Click on guard to focus
+- Debugger category appears automatically
+```
+
+#### What to Look For
+
+1. **State Transitions**: Watch states change as player moves
+2. **Suspicion Growth**: Confirm suspicion increases with proximity/visibility
+3. **External Alerts**: Verify broadcasts from other guards arrive
+4. **Target Locking**: Confirm target actor updates when guard spots player
+5. **LOS Tracking**: HasLOS updates when guards gain/lose sight
+
+### Console Variables
+
+```cpp
+// Patrol Route Visualization
+patrolpoints.debug.show 0/1      // Toggle patrol point visualization
+```
+
+When enabled, draws green spheres at patrol points and yellow lines between them.
+
+### Logging
+
+The system uses Unreal's logging system extensively. Check `Output Log` for:
+
+```cpp
+UE_LOG(LogTemp, Display, TEXT("AI Info"));  // Informational
+UE_LOG(LogTemp, Warning, TEXT("AI Issue"));  // Potential problems
+```
+
+Key log messages:
+- "Behavior tree started successfully"
+- "Saw Actor: {name}"
+- "Failed to initialize blackboard"
+- "Found PatrolRoute: {name}"
+
+---
+
+## Performance Considerations
+
+- **Perception**: Sight checks run every 0.1s by default (Unreal standard)
+- **BT Services**: Set to 0.15s (6-7 updates/second) - balance between responsiveness and performance
+- **Communication**: Limited by `BroadcastCooldownSeconds` to prevent spam
+- **Blackboard Access**: Cheap operations; BT reads/writes happen frequently
+- **Patrol Route**: Pre-computed patrol points; minimal overhead
+
+For large numbers of guards (10+), consider:
+- Reducing service `Interval` if guards feel unresponsive
+- Increasing `Interval` if frame rate drops
+- Disabling communication broadcasts for distant guards
+
+---
+
+## Extension Points
+
+The system is designed for easy extension:
+
+1. **Custom Alert Types**: Add to `EAIAlertType` enum
+2. **Additional Services**: Create new `UBTService` subclasses
+3. **State-Specific Behaviors**: Add cases to `UpdateGuardState()`
+4. **Combat System**: Hook into Chase state for combat tasks
+5. **Noise System**: Integrate with hearing sense (scaffolding exists)
+6. **Memory System**: Track player sighting history in blackboard
+7. **Coordinated Tactics**: Create group decision-making services
+
+---
+
+## Summary
+
+The Stealth Variant AI system provides a **complete, extensible framework** for stealth gameplay. The layered architecture (Perception → Suspicion → State Machine → Behavior Tree) creates emergent guard behavior that's both challenging and fair to players. Parameters are tunable for different difficulty levels, and the communication system enables coordinated multi-guard responses for engaging encounters.
+
+Key strengths:
+- ✅ Data-driven behavior (Behavior Tree + Blackboard)
+- ✅ Intuitive suspicion mechanics that encourage stealth gameplay
+- ✅ Inter-agent communication for emergent squad behavior
+- ✅ Extensive in-game debugging tools
+- ✅ Fully configurable for rapid iteration
+- ✅ Blueprint-friendly for designers
+- ✅ Production-ready foundation for stealth games
+
 
