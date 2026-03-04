@@ -1,4 +1,4 @@
-name: Build UE Shipping (Win64)
+name: Build UE Development (Win64)
 
 on:
   push:
@@ -8,18 +8,15 @@ on:
 jobs:
   build:
     runs-on: [self-hosted, windows]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           lfs: true
 
-      # Optional: ensure submodules are fetched if you use them
-      # - name: Checkout submodules
-      #   run: git submodule update --init --recursive
-
-      - name: Build/Cook/Package (Shipping)
-        shell: pwsh
+      - name: Build/Cook/Package (Development)
+        shell: powershell
         env:
           # CHANGE THIS to your Unreal Engine install path on YOUR PC.
           UE_PATH: C:\Program Files\Epic Games\UE_5.7
@@ -43,12 +40,12 @@ jobs:
             -project="$projectPath" `
             -noP4 `
             -platform=Win64 `
-            -clientconfig=Shipping `
+            -clientconfig=Development `
             -build -cook -stage -pak `
             -archive -archivedirectory="$outDir"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ShippingBuild-Win64
+          name: DevelopmentBuild-Win64
           path: BuildOutput
