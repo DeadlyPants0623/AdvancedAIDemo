@@ -1,0 +1,54 @@
+name: Build UE Shipping (Win64)
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, windows]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # Optional: ensure submodules are fetched if you use them
+      # - name: Checkout submodules
+      #   run: git submodule update --init --recursive
+
+      - name: Build/Cook/Package (Shipping)
+        shell: pwsh
+        env:
+          # CHANGE THIS to your Unreal Engine install path on YOUR PC.
+          UE_PATH: C:\Program Files\Epic Games\UE_5.7
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # Find the .uproject (or hardcode it for reliability)
+          $uproject = Get-ChildItem -Recurse -Filter *.uproject | Select-Object -First 1
+          if (-not $uproject) { throw "No .uproject found in repo." }
+
+          $projectPath = $uproject.FullName
+          Write-Host "Project: $projectPath"
+
+          $uat = Join-Path $env:UE_PATH "Engine\Build\BatchFiles\RunUAT.bat"
+          if (-not (Test-Path $uat)) { throw "RunUAT not found at: $uat. Check UE_PATH." }
+
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "BuildOutput"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          & $uat BuildCookRun `
+            -project="$projectPath" `
+            -noP4 `
+            -platform=Win64 `
+            -clientconfig=Shipping `
+            -build -cook -stage -pak `
+            -archive -archivedirectory="$outDir"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShippingBuild-Win64
+          path: BuildOutput
