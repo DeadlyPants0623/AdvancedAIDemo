@@ -8,6 +8,7 @@
 #include "AIController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AStealthAIController.h"
+#include "AStealthGuardCharacter.h"
 #include "StealthGuardState.h"
 
 UBTService_ConfirmTarget::UBTService_ConfirmTarget()
@@ -49,5 +50,17 @@ void UBTService_ConfirmTarget::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 	{
 		BB->SetValueAsFloat("Suspicion", 1.0f);
 		BB->SetValueAsObject("TargetActor", Suspect);
+		
+		// Broadcast to nearby guards
+		APawn* GuardPawn = AIC->GetPawn();
+		if (GuardPawn)
+		{
+			// GuardPawn is your AAStealthGuardCharacter
+			AAStealthGuardCharacter* Guard = Cast<AAStealthGuardCharacter>(GuardPawn);
+			if (Guard && Guard->AIComms)
+			{
+				Guard->AIComms->BroadcastAlert(EAIAlertType::Confirmed, Suspect->GetActorLocation(), 1.0f);
+			}
+		}
 	}
 }

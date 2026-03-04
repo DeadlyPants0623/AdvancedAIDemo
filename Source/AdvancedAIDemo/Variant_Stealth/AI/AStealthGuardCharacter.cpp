@@ -19,6 +19,8 @@ AAStealthGuardCharacter::AAStealthGuardCharacter()
 	HeadLamp->Intensity = 20000.f;
 	HeadLamp->bUseInverseSquaredFalloff = false;
 	HeadLamp->AttenuationRadius = 1500.f;
+	
+	AIComms = CreateDefaultSubobject<UAICommunicationComponent>(TEXT("AIComms"));
 }
 
 // Called when the game starts or when spawned

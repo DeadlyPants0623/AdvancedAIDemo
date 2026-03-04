@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "AIController.h"
 #include "Perception/AISenseConfig_Sight.h"
+#include "AIAlertReceiver.h"
+#include "AIAlertTypes.h"
 #include "AStealthAIController.generated.h"
 
 class UBehaviorTree;
@@ -12,12 +14,17 @@ class UBlackboardComponent;
 class APatrolRoute;
 
 UCLASS()
-class ADVANCEDAIDEMO_API AAStealthAIController : public AAIController
+class ADVANCEDAIDEMO_API AAStealthAIController : public AAIController, public IAIAlertReceiver
 {
 	GENERATED_BODY()
 
 public:
 	AAStealthAIController();
+	
+	virtual bool ReceiveAIAlert(const FAIAlertData& AlertData) override;
+	
+	UPROPERTY(EditAnywhere, Category = "AI|Communication")
+	float ExternalAlertHoldSeconds = 4.0f;
 
 protected:
 
@@ -65,6 +72,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "AI|Blackboard Keys")
 	FName Key_InvestigateActive = "InvestigateActive";
 	
+	UPROPERTY(EditDefaultsOnly, Category = "AI|Blackboard Keys")
+	FName Key_PatrolActor = "PatrolActor";
+	
 public:
 	// ---- Suspicion tuning (single source of truth) ----
 	UPROPERTY(EditDefaultsOnly, Category="AI|Suspicion")
@@ -85,6 +95,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category="AI|Confirm")
 	float ConfirmSuspicion = 0.95f;
+	
+	UPROPERTY(EditDefaultsOnly, Category="AI|Patrol")
+	int8 StartingPatrolIndex = 0;
 	
 	UFUNCTION(BlueprintCallable, Category="AI|State")
 	void UpdateGuardState();

@@ -38,7 +38,15 @@ public class AdvancedAIDemo : ModuleRules
 			"AdvancedAIDemo/Variant_SideScrolling/AI",
 			"AdvancedAIDemo/Variant_SideScrolling/Gameplay",
 			"AdvancedAIDemo/Variant_SideScrolling/Interfaces",
-			"AdvancedAIDemo/Variant_SideScrolling/UI"
+			"AdvancedAIDemo/Variant_SideScrolling/UI",
+			"AdvancedAIDemo/Variant_Stealth/AI",
+			"AdvancedAIDemo/Variant_Stealth/AI/BT",
+			"AdvancedAIDemo/Variant_Stealth/Character",
+			"AdvancedAIDemo/Variant_Stealth/Enum",
+			"AdvancedAIDemo/Variant_Stealth/Utilities",
+			"AdvancedAIDemo/Variant_Stealth/AI/Core",
+			"AdvancedAIDemo/Variant_Stealth/AI/Components",
+			"AdvancedAIDemo/Variant_Stealth/Debugger"
 		});
 
 		// Uncomment if you are using Slate UI

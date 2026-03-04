@@ -22,4 +22,17 @@ private:
 	float SuspicionMaxGainDistance = 0.f;
 	float ConfirmDistance = 0.f;
 	float ConfirmSuspicion = 0.f;
+	
+	uint8 StateRaw = 0;
+	bool bHasLOS = false;
+	bool bHasTarget = false;
+
+	float ExternalAlertUntil = 0.f;
+	float ExternalAlertRemaining = 0.f;
+
+	float CommsRadius = 0.f;
+	float CommsCooldown = 0.f;
+
+	FString TargetName;
+	FString SuspectName;
 };

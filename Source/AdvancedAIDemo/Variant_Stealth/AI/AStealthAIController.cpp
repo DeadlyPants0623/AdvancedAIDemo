@@ -3,7 +3,10 @@
 
 #include "AStealthAIController.h"
 
+#include "AStealthGuardCharacter.h"
+#include "PatrolRoute.h"
 #include "StealthGuardState.h"
+#include "VideoRecordingSystem.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Perception/AIPerceptionComponent.h"
@@ -59,6 +62,47 @@ AAStealthAIController::AAStealthAIController()
 	//AiPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &AAStealthAIController::OnTargetPerceptionUpdated);
 }
 
+bool AAStealthAIController::ReceiveAIAlert(const FAIAlertData& AlertData)
+{
+	UBlackboardComponent* BB = GetBlackboardComponent();
+	if (!BB || !GetWorld()) return false;
+
+	// If already actively chasing with LOS, ignore weaker alerts
+	const bool bHasLOS = BB->GetValueAsBool("HasLos");
+	const bool bHasTarget = BB->GetValueAsObject("TargetActor") != nullptr;
+	if (bHasTarget && bHasLOS && AlertData.Type != EAIAlertType::Confirmed)
+	{
+		return false;
+	}
+
+	// Always update investigate location for “go check it out”
+	BB->SetValueAsVector("InvestigateLocation", AlertData.WorldLocation);
+
+	// Raise suspicion using existing system (drives Investigate state naturally)
+	const float CurrentSuspicion = BB->GetValueAsFloat("Suspicion");
+	const float NewSuspicion = FMath::Clamp(FMath::Max(CurrentSuspicion, AlertData.Strength), 0.f, 1.f);
+	BB->SetValueAsFloat("Suspicion", NewSuspicion);
+
+	// If we know which actor (optional), set suspected actor
+	if (AlertData.TargetActor.IsValid())
+	{
+		BB->SetValueAsObject("SuspectedActor", AlertData.TargetActor.Get());
+	}
+
+	// Hold alert state for a bit even if suspicion decays or they were never chasing.
+	// This avoids fighting your UpdateGuardState logic.
+	if (AlertData.Type == EAIAlertType::Confirmed)
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		BB->SetValueAsFloat("ExternalAlertUntil", Now + ExternalAlertHoldSeconds);
+
+		// Also refresh LastSeenTime so your existing “recently seen” logic behaves nicely
+		BB->SetValueAsFloat("LastSeenTime", Now);
+	}
+
+	return true;
+}
+
 void AAStealthAIController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -93,11 +137,27 @@ void AAStealthAIController::OnPossess(APawn* InPawn)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Failed to initialize blackboard"));
 	}
-	
+
 	if (AiPerceptionComponent)
 	{
 		AiPerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(
 			this, &AAStealthAIController::OnTargetPerceptionUpdated);
+	}
+	UBlackboardComponent* BB = GetBlackboardComponent();
+	AAStealthGuardCharacter* Guard = Cast<AAStealthGuardCharacter>(InPawn);
+	if (!Guard) return;
+	if (BB)
+	{
+
+		// Get Patrol Actor from blackboard
+		int8 MaxPatrolIndex = 0;
+		UE_LOG(LogTemp, Display, TEXT("Found PatrolRoute: %s"), Guard->PatrolRoute ? *Guard->PatrolRoute->GetName() : TEXT("None"));
+		if (Guard->PatrolRoute)
+		{
+			MaxPatrolIndex = Guard->PatrolRoute->PointCount;
+		}
+		UE_LOG(LogTemp, Display, TEXT("MaxPatrolIndex: %d"), MaxPatrolIndex);
+		BB->SetValueAsInt("PatrolIndex", FMath::RandRange(0, MaxPatrolIndex - 1));
 	}
 }
 
@@ -107,10 +167,10 @@ void AAStealthAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus
 	{
 		return;
 	}
-	
+
 	const bool bIsSight = (Stimulus.Type == UAISense::GetSenseID(UAISense_Sight::StaticClass()));
 	const bool bIsHearing = (Stimulus.Type == UAISense::GetSenseID(UAISense_Hearing::StaticClass()));
-	
+
 	if (bIsSight)
 	{
 		if (Stimulus.WasSuccessfullySensed())
@@ -133,23 +193,21 @@ void AAStealthAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus
 		if (Stimulus.WasSuccessfullySensed())
 		{
 			// Heard Something
-			
 		}
 	}
 }
 
 void AAStealthAIController::SetBBBool(const FName Key, bool bValue)
 {
-	if (UBlackboardComponent * BB = GetBlackboardComponent())
+	if (UBlackboardComponent* BB = GetBlackboardComponent())
 	{
 		BB->SetValueAsBool(Key, bValue);
 	}
-		
 }
 
 void AAStealthAIController::SetBBVector(const FName Key, const FVector& Value)
 {
-	if (UBlackboardComponent * BB = GetBlackboardComponent())
+	if (UBlackboardComponent* BB = GetBlackboardComponent())
 	{
 		BB->SetValueAsVector(Key, Value);
 	}
@@ -157,7 +215,7 @@ void AAStealthAIController::SetBBVector(const FName Key, const FVector& Value)
 
 void AAStealthAIController::SetBBObject(const FName Key, UObject* Value)
 {
-	if (UBlackboardComponent * BB = GetBlackboardComponent())
+	if (UBlackboardComponent* BB = GetBlackboardComponent())
 	{
 		BB->SetValueAsObject(Key, Value);
 	}
@@ -165,7 +223,7 @@ void AAStealthAIController::SetBBObject(const FName Key, UObject* Value)
 
 void AAStealthAIController::SetBBFloat(const FName Key, float Value)
 {
-	if (UBlackboardComponent * BB = GetBlackboardComponent())
+	if (UBlackboardComponent* BB = GetBlackboardComponent())
 	{
 		BB->SetValueAsFloat(Key, Value);
 	}
@@ -178,8 +236,10 @@ void AAStealthAIController::UpdateGuardState()
 	const float Now = GetWorld()->GetTimeSeconds();
 
 	const bool bHasTarget = Blackboard->GetValueAsObject(Key_TargetActor) != nullptr;
-	const bool bHasLOS    = Blackboard->GetValueAsBool(Key_HasLos);
+	const bool bHasLOS = Blackboard->GetValueAsBool(Key_HasLos);
 	const float Suspicion = Blackboard->GetValueAsFloat(Key_Suspicion);
+	const float ExternalAlertUntil = Blackboard->GetValueAsFloat(TEXT("ExternalAlertUntil"));
+	const bool bExternalAlertActive = (Now <= ExternalAlertUntil);
 
 	const uint8 CurrentStateRaw = Blackboard->GetValueAsEnum(TEXT("State"));
 	const bool bWasChasing = (CurrentStateRaw == (uint8)EStealthGuardState::Chase);
@@ -199,22 +259,26 @@ void AAStealthAIController::UpdateGuardState()
 
 	EStealthGuardState NewState;
 
-	// 1) Highest priority: currently seeing target -> CHASE
+	// 1) Seeing target -> CHASE
 	if (bHasTarget && bHasLOS)
 	{
 		NewState = EStealthGuardState::Chase;
 	}
-	// 2) If we were chasing and just lost LOS recently -> ALERT
+	// 2) External alert forces ALERT (unless chasing)
+	else if (bExternalAlertActive)
+	{
+		NewState = EStealthGuardState::Alert;
+	}
+	// 3) Was chasing recently -> ALERT
 	else if (bWasChasing && TimeSinceSeen <= AlertAfterChaseWindow)
 	{
 		NewState = EStealthGuardState::Alert;
 	}
-	// 3) Suspicion thresholds -> INVESTIGATE (or ALERT if you want a high-suspicion alert)
+	// 4) Suspicion -> INVESTIGATE
 	else if (Suspicion >= InvestigateThreshold)
 	{
 		NewState = EStealthGuardState::Investigate;
 	}
-	// 4) Otherwise -> PATROL
 	else
 	{
 		NewState = EStealthGuardState::Patrol;

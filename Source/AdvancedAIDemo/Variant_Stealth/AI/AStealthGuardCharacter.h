@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Components/SpotLightComponent.h"
+#include "AIAlertReceiver.h"
+#include "AICommunicationComponent.h"
 #include "AStealthGuardCharacter.generated.h"
 
 class AAStealthAIController;
@@ -20,9 +22,6 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "AI|Patrol")
-	TObjectPtr<APatrolRoute> PatrolRoute;
 
 	UPROPERTY(EditDefaultsOnly, Category = "AI|Movement")
 	float PatrolSpeed = 200.f;
@@ -63,4 +62,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "AI|Movement")
 	void SetDebugSpeed();
+	
+	UPROPERTY(VisibleAnywhere)
+	UAICommunicationComponent* AIComms;
+	
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "AI|Patrol")
+	TObjectPtr<APatrolRoute> PatrolRoute;
 };
