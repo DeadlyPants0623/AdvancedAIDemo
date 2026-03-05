@@ -16,7 +16,8 @@ A comprehensive stealth gameplay AI system for Unreal Engine 5, featuring intell
 8. [Communication System](#communication-system)
 9. [Configuration & Tuning](#configuration--tuning)
 10. [Debug Tools](#debug-tools)
-11. [API Reference](#api-reference)
+11. [Build & Deployment](#build--deployment)
+12. [API Reference](#api-reference)
 
 ---
 
@@ -837,6 +838,99 @@ The system is designed for easy extension:
 5. **Noise System**: Integrate with hearing sense (scaffolding exists)
 6. **Memory System**: Track player sighting history in blackboard
 7. **Coordinated Tactics**: Create group decision-making services
+
+---
+
+## Build & Deployment
+
+### GitHub Actions Workflow
+
+The project includes automated build, cook, and packaging via GitHub Actions. The workflow is defined in `.github/workflows/build-shipping.yml`.
+
+#### Workflow Configuration
+
+```yaml
+name: Build UE Development (Win64)
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, windows]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Build/Cook/Package (Development)
+        shell: powershell
+        env:
+          # CHANGE THIS to your Unreal Engine install path on YOUR PC.
+          UE_PATH: C:\Program Files\Epic Games\UE_5.7
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # Find the .uproject (or hardcode it for reliability)
+          $uproject = Get-ChildItem -Recurse -Filter *.uproject | Select-Object -First 1
+          if (-not $uproject) { throw "No .uproject found in repo." }
+
+          $projectPath = $uproject.FullName
+          Write-Host "Project: $projectPath"
+
+          $uat = Join-Path $env:UE_PATH "Engine\Build\BatchFiles\RunUAT.bat"
+          if (-not (Test-Path $uat)) { throw "RunUAT not found at: $uat. Check UE_PATH." }
+
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "BuildOutput"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          & $uat BuildCookRun `
+            -project="$projectPath" `
+            -noP4 `
+            -platform=Win64 `
+            -clientconfig=Development `
+            -build -cook -stage -pak `
+            -archive -archivedirectory="$outDir"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DevelopmentBuild-Win64
+          path: BuildOutput
+```
+
+#### Setup Instructions
+
+1. **Configure Self-Hosted Runner**: The workflow uses `[self-hosted, windows]` runners, so you need a Windows machine registered as a GitHub Actions self-hosted runner.
+
+2. **Set Unreal Engine Path**: Update `UE_PATH` environment variable to match your Unreal Engine 5.7 installation:
+   ```powershell
+   UE_PATH: C:\Program Files\Epic Games\UE_5.7
+   ```
+
+3. **Enable Triggers**: The workflow automatically triggers on pushes to `master` or `main` branches. You can also manually trigger via GitHub's "Actions" tab using `workflow_dispatch`.
+
+4. **Build Output**: Packaged builds are available as artifacts named `DevelopmentBuild-Win64` in the GitHub Actions run summary.
+
+#### What the Workflow Does
+
+1. **Checkout**: Clones the repository with Git LFS support
+2. **Build**: Compiles C++ source code
+3. **Cook**: Processes assets into engine-native formats
+4. **Stage**: Prepares the distribution package
+5. **Package**: Creates the final executable package
+6. **Archive**: Stores output in BuildOutput directory
+7. **Upload Artifact**: Makes build available for download from GitHub
+
+#### Customization
+
+- **Change Platforms**: Modify `-platform=Win64` to support other platforms (e.g., `Linux`, `Mac`)
+- **Change Configuration**: Replace `clientconfig=Development` with `Shipping` for final releases
+- **Add More Branches**: Add branches to the `on.push.branches` list to trigger on additional branches
 
 ---
 
