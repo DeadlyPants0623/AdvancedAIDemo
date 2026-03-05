@@ -3,6 +3,12 @@ name: Build UE Development (Win64)
 on:
   push:
     branches: [ "master", "main" ]
+    paths:
+        - '**.uproject'
+        - 'Source/**'
+        - 'Content/**'
+        - 'Config/**'
+        - 'Build/**'
   workflow_dispatch:
 
 jobs:
